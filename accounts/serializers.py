@@ -1,37 +1,39 @@
-from rest_framework import serializers
-from django.contrib.auth.hashers import make_password
-from .models import CustomUser
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+User = get_user_model()
 
 class SignupSerializer(serializers.ModelSerializer):
     class Meta:
-        model = CustomUser
+        model = User
         fields = ('username', 'password', 'nickname')
 
-    def validate_password(self, value):
+    def validate(self, attrs):
         """비밀번호 강도 검사를 추가"""
+        password = attrs.get("password")
         try:
-            validate_password(value)  # Django의 기본 비밀번호 검증 사용
+            validate_password(password)
         except ValidationError as e:
-            raise serializers.ValidationError(e.messages)
-        return value
+            raise serializers.ValidationError({"password": e.messages})
+        return super().validate(attrs)
+
     def create(self, validated_data):
         """유저 생성 시 비밀번호를 안전하게 저장"""
-        user = CustomUser(
-            username=validated_data["username"],
-            nickname=validated_data["nickname"]
+        user = User(
+            username=validated_data['username'],
+            nickname=validated_data['nickname']
         )
-        user.set_password(validated_data["password"])  # set_password() 사용
+        user.set_password(validated_data['password'])  # 비밀번호 해싱
         user.save()
         return user
-
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        token["username"] = user.username  # 토큰에 추가할 데이터
+        token["username"] = user.username
+        token["nickname"] = user.nickname  # 닉네임도 토큰에 포함
         return token
